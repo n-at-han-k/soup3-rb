@@ -18,10 +18,17 @@ method, property and signal it has. `Soup::Loader` — twenty lines — hands th
 typelib to ruby-gnome's `GObjectIntrospection::Loader`, which defines the Ruby
 classes from it at `require` time.
 
-So this gem is pure Ruby. There is no extension, no Cargo workspace, no
-per-platform binary, and `gem install soup3` wants no toolchain. You get the
-whole library rather than the subset somebody got round to wrapping by hand,
-and it does not drift when libsoup gains API.
+So this gem is pure Ruby: no extension of its own, no Cargo workspace, no
+per-platform binary. You get the whole library rather than the subset somebody
+got round to wrapping by hand, and it does not drift when libsoup gains API.
+
+It is worth being precise about what that does and does not buy you at install
+time. `gem install soup3` still compiles C, because `gobject-introspection` and
+`glib2` are themselves native extensions built against glib — so a compiler and
+glib's development headers are needed. What this gem adds on top of that is
+nothing: those two are what every ruby-gnome application already has, since
+`gtk4` depends on them. If you are writing a Ruby GTK app, soup3 costs you no
+build step you were not already paying.
 
 This is how [ruby-gnome](https://github.com/ruby-gnome/ruby-gnome) itself ships
 gtksourceview5, libsecret and the rest.
