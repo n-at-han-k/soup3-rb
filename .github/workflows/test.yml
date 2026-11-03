@@ -1,0 +1,60 @@
+# Runs the suite in the same dev shell a developer gets.
+#
+# This gem is pure Ruby, so there is nothing to cross-compile and no
+# per-platform matrix. What it does need is libsoup's typelib, and the glib
+# that typelib was built against -- get those from two different places and
+# GIO is registered twice in one process, which fails as
+# `cannot register existing type 'GTlsCertificate'`.
+#
+# flake.nix already pins all of that and puts it on GI_TYPELIB_PATH. So CI runs
+# through `nix develop` rather than installing gems and apt packages and hoping
+# the versions line up: the shell is the contract, and CI checking a different
+# environment than the one people develop in is how an environment bug reaches
+# a release.
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # The flake evaluates `self`, so the files have to be in git's index.
+      # A checkout satisfies that; this is the guard for anything generated.
+      - name: Check the tree is what the flake will see
+        run: git status --porcelain
+
+      - name: Run the suite
+        run: nix develop --command bin/test
+
+      # The point of the gem is that it needs no toolchain. This proves it:
+      # build it, install it into an empty GEM_HOME, and require it with only
+      # the typelib from the dev shell on the path.
+      - name: Build and install the gem from a clean GEM_HOME
+        run: |
+          nix develop --command bash -lc '
+            set -euo pipefail
+            gem build soup3.gemspec
+            export GEM_HOME="$PWD/tmp/clean-gem-home"
+            gem install ./soup3-*.gem --no-document
+            ruby -e "require \"soup3\"; raise \"no constants\" if Soup.constants.size < 50; puts \"installed gem loads #{Soup.constants.size} constants\""
+          '
